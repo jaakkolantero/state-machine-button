@@ -1,117 +1,146 @@
-import { useReducer, useEffect, useState } from "react";
-import { useSpring, animated } from "react-spring";
+import { useMachine } from "@xstate/react";
+import { Machine } from "xstate";
+import { useEffect } from "react";
 
-type State = "IDLE" | "LOADING" | "SUCCESS" | "FAILURE";
-type Event = "CLICK" | "RESET" | "LOADED" | "FAILED";
-
-interface StateShift {
-  on: OnEvent;
-}
-type OnEvent = { [E in Event]?: State };
-type StateShifts = { [S in State]: StateShift };
-
-interface Machine {
-  initial: State;
-  states: StateShifts;
-}
-
-const ButtonMachine: Machine = {
-  initial: "IDLE",
+// The hierarchical (recursive) schema for the states
+interface ButtonStateSchema {
   states: {
-    ["IDLE"]: {
-      on: {
-        ["CLICK"]: "LOADING"
-      }
+    idle: {};
+    loading: {};
+    success: {};
+    failure: {};
+  };
+}
+
+type ButtonEvent =
+  | { type: "CLICK" }
+  | { type: "RESET" }
+  | { type: "LOADED" }
+  | { type: "FAILED" };
+
+interface ButtonContext {}
+
+const buttonMachine = Machine<ButtonContext, ButtonStateSchema, ButtonEvent>({
+  id: "button",
+  initial: "idle",
+  states: {
+    idle: {
+      on: { CLICK: "loading" }
     },
-    ["LOADING"]: {
-      on: {
-        ["LOADED"]: "SUCCESS",
-        ["FAILED"]: "FAILURE"
-      }
+    loading: {
+      on: { LOADED: "success", FAILED: "failure" }
     },
-    ["SUCCESS"]: {
-      on: {
-        ["CLICK"]: "IDLE",
-        ["RESET"]: "IDLE"
-      }
+    success: {
+      on: { RESET: "idle", CLICK: "idle" }
     },
-    ["FAILURE"]: {
-      on: {
-        ["CLICK"]: "LOADING",
-        ["RESET"]: "IDLE"
-      }
+    failure: {
+      on: { RESET: "idle", CLICK: "loading" }
     }
   }
-};
-
-const ButtonReducer = (state: State, event: Event) => {
-  return ButtonMachine.states[state].on[event] || state;
-};
+});
 
 const TIMEOUT = 2000;
 
 export default () => {
-  const [state, dispatch] = useReducer(ButtonReducer, ButtonMachine.initial);
-  const { x } = useSpring({
-    from: { x: 0 },
-    x: state === "SUCCESS" ? 1 : 0,
-    config: { duration: 1000 }
-  });
+  const [state, send] = useMachine(buttonMachine);
 
   useEffect(() => {
-    switch (state) {
+    console.log("STATE: ", state.value);
+    switch (state.value) {
       //MOCKING FETCH
-      case "LOADING":
+      case "loading":
         Math.random() < 0.5
-          ? setTimeout(() => dispatch("LOADED"), TIMEOUT)
-          : setTimeout(() => dispatch("FAILED"), TIMEOUT);
+          ? setTimeout(() => send("LOADED"), TIMEOUT)
+          : setTimeout(() => send("FAILED"), TIMEOUT);
         break;
-      case "SUCCESS":
-        setTimeout(() => dispatch("RESET"), TIMEOUT);
+      case "success":
+        setTimeout(() => send("RESET"), TIMEOUT);
         break;
-      case "FAILURE":
-        setTimeout(() => dispatch("RESET"), TIMEOUT);
+      case "failure":
+        setTimeout(() => send("RESET"), TIMEOUT);
         break;
     }
   }, [state]);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="flex-1 py-12 px-4 bg-gray-200">
-        <div className="flex flex-col justify-center items-center">
-          <div className="bg-gray-100 p-12 rounded-lg border border-gray-300">
-            <animated.div
-              className="flex justify-center"
-              style={{
-                opacity: x.interpolate({ range: [0, 1], output: [0.3, 1] }),
-                transform: x
-                  .interpolate({
-                    range: [0, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 1],
-                    output: [1, 0.97, 0.9, 1.1, 0.9, 1.1, 1.03, 1]
-                  })
-                  .interpolate(x => `scale(${x})`)
-              }}
-            >
-              {state}
-            </animated.div>
-            <div className="flex justify-center mt-6">
-              <button
-                className="py-2 px-4 rounded bg-black text-white hover:text-pink-500 hover:bg-gray-900"
-                onClick={() => dispatch("CLICK")}
-              >
-                Submit
-              </button>
-              <button
-                className="underline text-sm ml-3 text-gray-700"
-                onClick={() => dispatch("RESET")}
-              >
-                RESET
-              </button>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col justify-center items-center min-h-screen">
+      <div className="mb-3 flex justify-center">
+        <svg
+          className="w-6 h-6 text-pink-400"
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+        >
+          <path
+            d="M6.27 17.05A2.991 2.991 0 014 22c-1.66 0-3-1.34-3-3s1.34-3 3-3c.18 0 .36 0 .53.05l3.07-5.36-1.74-.99 4.09-1.12 1.12 4.09-1.74-.99-3.06 5.37M20 16c-1.3 0-2.4.84-2.82 2H11v-2l-3 3 3 3v-2h6.18c.42 1.16 1.52 2 2.82 2 1.66 0 3-1.34 3-3s-1.34-3-3-3m-8-8c.18 0 .36 0 .53-.05l3.07 5.36-1.74.99 4.09 1.12 1.12-4.09-1.74.99-3.06-5.37A2.991 2.991 0 0012 2c-1.66 0-3 1.34-3 3s1.34 3 3 3z"
+            fill="currentColor"
+          />
+        </svg>
+        <span className="ml-3">{state.value}</span>
       </div>
-      <div className="bg-black text-white py-12 px-10">footer</div>
+      <button
+        className="py-2 px-4 rounded bg-pink-600 hover:bg-pink-500"
+        onClick={() => send("CLICK")}
+      >
+        <output className="status">
+          <div
+            className="status-text"
+            data-active={state.matches("idle")}
+            data-for={state.value}
+          >
+            Submit
+          </div>
+          <div
+            className="status-text"
+            data-active={state.matches("loading")}
+            data-for={state.value}
+          >
+            Loading...
+          </div>
+          <div
+            className="status-text"
+            data-active={state.matches("failure")}
+            data-for={state.value}
+          >
+            Retry
+          </div>
+          <div
+            className="status-text"
+            data-active={state.matches("success")}
+            data-for={state.value}
+          >
+            Success
+          </div>
+        </output>
+      </button>
+      <style jsx>{`
+        .status {
+          display: grid;
+          overflow: hidden;
+          display: grid;
+          user-select: none;
+        }
+        .status div {
+          grid-area: 1/1;
+        }
+        .status-text {
+          transition: transform 0.5s ease;
+        }
+        .status-text[data-for="idle"] {
+          transform: translateY(100%);
+        }
+        .status-text[data-for="loading"] {
+          transform: translateY(100%);
+        }
+        .status-text[data-for="failure"] {
+          transform: translateY(100%);
+        }
+        .status-text[data-for="success"] {
+          transform: translateY(100%);
+        }
+        .status-text[data-active="true"] {
+          transform: translateY(0);
+        }
+      `}</style>
     </div>
   );
 };
