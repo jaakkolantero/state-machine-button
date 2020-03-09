@@ -119,7 +119,7 @@ export default () => {
           display: grid;
           user-select: none;
         }
-        .status div {
+        .status > div {
           grid-area: 1/1;
         }
         .status-text {
